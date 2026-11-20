@@ -2702,3 +2702,55 @@
   .rx-price-contact__btn:hover { transform: none; }
   .rx-price-contact__btn--main:hover .rx-price-contact__btn-arrow { transform: translateY(-50%); }
 }
+
+/* =========================================================================
+   動き（2026-11-20。参考: bizsalesnavi.contentsx.jp の控えめな「浮き上がって現れる」）
+   - 移動は 20px・0.7秒。動かすのは opacity と translate だけ（transform を使う既存のホバー・配置とぶつからない）
+   - ① ヒーローの登場: 読み込み時に、見出し → リード → 料金カード → 追記 → ボタン → 注記の順に浮き上がる（CSS だけ）。
+     人物の大きな画像（ページで一番大きな画像）は動かさない（表示が遅く見えないように）
+   - ② スクロールで現れる: js/price-motion.js が「画面より下にあるもの」に .rx-reveal を付け、
+     画面に入ったら .is-inview を付ける。現れ終わったらクラスを外す。画面より下へ出たら隠し直すので何度でも動く。
+     スクリプトが動かなければ何も隠れない
+   - 「視差効果を減らす」設定のときはどちらも動かさない
+   ========================================================================= */
+@keyframes rx-price-rise {
+  from { opacity: 0; translate: 0 20px; }
+  to   { opacity: 1; translate: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rx-price-hero__eyebrow,
+  .rx-price-hero__title,
+  .rx-price-hero__lead,
+  .rx-price-hero__card,
+  .rx-price-hero__extra,
+  .rx-price-hero__actions,
+  .rx-price-hero__notes,
+  .rx-price-hero__catch,
+  .rx-price-hero__story,
+  .rx-price-hero__manga { animation: rx-price-rise .7s cubic-bezier(.2, .7, .2, 1) both; }
+  .rx-price-hero__eyebrow { animation-delay: .05s; }
+  .rx-price-hero__title   { animation-delay: .12s; }
+  .rx-price-hero__lead    { animation-delay: .2s; }
+  .rx-price-hero__card    { animation-delay: .28s; }
+  .rx-price-hero__extra   { animation-delay: .36s; }
+  .rx-price-hero__actions { animation-delay: .44s; }
+  .rx-price-hero__notes   { animation-delay: .52s; }
+  .rx-price-hero__story   { animation-delay: .35s; }   /* 漫画カード（PCだけ） */
+  .rx-price-hero__manga   { animation-delay: .45s; }
+  .rx-price-hero__catch   { animation-delay: .6s; }    /* 手書き風コピー */
+
+  .rx-reveal {
+    opacity: 0;
+    translate: 0 20px;
+  }
+  .rx-reveal.is-inview {
+    opacity: 1;
+    translate: none;
+    transition:
+      opacity .7s cubic-bezier(.2, .7, .2, 1) var(--rx-reveal-delay, 0s),
+      translate .7s cubic-bezier(.2, .7, .2, 1) var(--rx-reveal-delay, 0s);
+  }
+}
+@media print {
+  .rx-reveal { opacity: 1; translate: none; }
+}
