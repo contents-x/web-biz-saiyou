@@ -2,11 +2,13 @@
    price-motion.js — 料金ページ（price.html）だけの「スクロールで現れる」動き（2026-11-20）
    - 参考: bizsalesnavi.contentsx.jp の「スクロールで浮き上がる」（20px・0.7秒・同じ親の中では 0.09秒ずつ遅らせる）
    - 見出し・カード・注記・ボタンが画面に入ったとき、下から 20px 浮き上がりながら現れる
-   - 隠すのは「読み込んだ時点で画面より下にあるもの」だけ。画面の中・上にあるものは最初から見せたまま
+   - 何度でも動く: 上へ戻って画面より下に出たものは、また隠しておく（見えない所で隠すので、消える瞬間は見えない）。
+     もう一度下へスクロールすると、また現れる。上へ戻るときに上から入ってくるものは、見せたまま（動かさない）
+   - 隠すのは「画面より下にあるもの」だけ。読み込んだ時点で画面の中・上にあるものは見せたまま
      （読み込み直後に一瞬消えてまた出る、を起こさない）
    - このスクリプトが動かないとき・IntersectionObserver が無いとき・「視差効果を減らす」設定のときは何も隠さない
    - 現れ終わったらクラスを外し、ボタンなどの元のホバーの動きに戻す
-   - 見た目（.rx-reveal / .is-inview）は css/price.css の「動き」。ヒーローの登場は CSS だけで行う
+   - 見た目（.rx-reveal / .is-inview）は css/price.css の「動き」。ヒーローの登場は CSS だけで行う（1回だけ）
    ========================================================================= */
 (function () {
   'use strict';
@@ -33,45 +35,70 @@
   var DURATION = 700;   // ms（css/price.css の transition と同じ）
   var STEP = 90;        // 同じ親の中で、上から順に遅らせる間隔
   var MAX_STEPS = 5;    // 遅らせるのは最大 0.45秒まで
+  var timers = new Map();
 
-  function finish(el) {
-    el.classList.remove('rx-reveal', 'is-inview');
-    el.style.removeProperty('--rx-reveal-delay');
+  function delayOf(el) {
+    return parseInt(el.style.getPropertyValue('--rx-reveal-delay'), 10) || 0;
   }
 
-  var io = new IntersectionObserver(function (entries) {
+  // 隠す（画面より下にあるとき）
+  function hide(el) {
+    window.clearTimeout(timers.get(el));
+    timers.delete(el);
+    el.classList.remove('is-inview');
+    el.classList.add('rx-reveal');
+  }
+
+  // 現れる（画面に入ったとき）。現れ終わったらクラスを外して元の状態に戻す
+  function reveal(el) {
+    if (!el.classList.contains('rx-reveal') || el.classList.contains('is-inview')) return;
+    el.classList.add('is-inview');
+    window.clearTimeout(timers.get(el));
+    timers.set(el, window.setTimeout(function () { show(el); }, DURATION + delayOf(el) + 150));
+  }
+
+  // 動かさずにそのまま見せる
+  function show(el) {
+    window.clearTimeout(timers.get(el));
+    timers.delete(el);
+    el.classList.remove('rx-reveal', 'is-inview');
+  }
+
+  // 画面に入ったら現れる（下 8% は外して、少し入ってから動かす）
+  var revealIO = new IntersectionObserver(function (entries) {
     entries.forEach(function (entry) {
-      if (!entry.isIntersecting) return;
-      var el = entry.target;
-      io.unobserve(el);
-      el.classList.add('is-inview');
-      var delay = parseInt(el.style.getPropertyValue('--rx-reveal-delay'), 10) || 0;
-      window.setTimeout(function () { finish(el); }, DURATION + delay + 150);
+      if (entry.isIntersecting) reveal(entry.target);
     });
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
+
+  // 画面の外へ完全に出たとき: 下へ出たものは隠し直す（次に下へスクロールしたとき、また現れる）
+  var resetIO = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting || !entry.rootBounds) return;
+      if (entry.boundingClientRect.top >= entry.rootBounds.bottom) hide(entry.target);
+    });
+  }, { threshold: 0 });
+
+  // 画面に入らないまま上へ過ぎたもの（ページ内リンクの飛び先へのスクロール・途中での読み込み直し）は、動かさずに見せる
+  function showAbove() {
+    var els = document.querySelectorAll('.rx-reveal:not(.is-inview)');
+    Array.prototype.forEach.call(els, function (el) {
+      if (el.getBoundingClientRect().bottom <= 0) show(el);
+    });
+  }
 
   function init() {
     var viewH = window.innerHeight || document.documentElement.clientHeight;
     var counts = new Map();
     var targets = document.querySelectorAll(SELECTORS);
     Array.prototype.forEach.call(targets, function (el) {
-      if (el.getBoundingClientRect().top < viewH) return;   // 画面の中・上にあるものは隠さない
+      // 同じ親の中で上から何番目か（遅らせる時間）
       var n = counts.get(el.parentElement) || 0;
       counts.set(el.parentElement, n + 1);
       el.style.setProperty('--rx-reveal-delay', Math.min(n, MAX_STEPS) * STEP + 'ms');
-      el.classList.add('rx-reveal');
-      io.observe(el);
-    });
-  }
-
-  // 読み込み直し・ページ内リンク（例: price.html#deliver）では、読み込みのあとにブラウザが途中までスクロールする。
-  // そのとき画面より上に来たものは、動かさずにそのまま見せる（上へ戻ったときに改めて現れる、を起こさない）
-  function showAbove() {
-    var els = document.querySelectorAll('.rx-reveal:not(.is-inview)');
-    Array.prototype.forEach.call(els, function (el) {
-      if (el.getBoundingClientRect().bottom > 0) return;
-      io.unobserve(el);
-      finish(el);
+      if (el.getBoundingClientRect().top >= viewH) el.classList.add('rx-reveal');   // 画面より下にあるものだけ隠す
+      revealIO.observe(el);
+      resetIO.observe(el);
     });
   }
 
@@ -83,16 +110,13 @@
   window.addEventListener('load', function () { window.setTimeout(showAbove, 0); });
   window.addEventListener('pageshow', function (e) { if (e.persisted) showAbove(); });
   // ページ内リンクの飛び先へのスクロールは load のあとにも続くことがあるので、スクロールのたびにも確かめる
-  // （画面に入らないまま上へ過ぎたものだけが対象。普通に下へ読み進めたものは画面に入った時点で現れている）
   var ticking = false;
-  function onScroll() {
+  window.addEventListener('scroll', function () {
     if (ticking) return;
     ticking = true;
     window.requestAnimationFrame(function () {
       ticking = false;
       showAbove();
-      if (!document.querySelector('.rx-reveal:not(.is-inview)')) window.removeEventListener('scroll', onScroll);
     });
-  }
-  window.addEventListener('scroll', onScroll, { passive: true });
+  }, { passive: true });
 })();
